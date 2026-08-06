@@ -732,10 +732,14 @@ git commit -m "feat: 전체 흐름 오케스트레이션 진입점 추가"
 - [ ] **Step 4: 실사이트 대상 수동 통합 테스트**
 
 1. `.env.example`을 `.env`로 복사하고 실제 `XFILE_LOGIN_URL`, `XFILE_USERNAME`, `XFILE_PASSWORD`, 테스트할 공고 1~2개의 `XFILE_POSTING_URLS`를 입력한다. 처음에는 `XFILE_HEADLESS=false`로 설정해 브라우저 동작을 눈으로 확인한다.
-2. Run: `cd /Users/apple/meaningeco-automation && source .venv/bin/activate && python -m agent_selection.main`
+2. Run: `cd /Users/apple/meaningeco-automation && source .venv/bin/activate && python -m agent_selection.main` (README에 기록된 정확한 실행 명령을 따른다 — 최종 리뷰에서 패키징 문제로 이 명령이 그대로 동작하지 않을 수 있음이 발견되어 수정되었다)
 3. 콘솔에 지원자 목록과 역할타입별 집계가 출력되는지 확인한다.
 4. `output/` 디렉터리에 JSON/CSV 파일이 생성되고, 값이 실제 엑스파일 화면과 일치하는지 확인한다.
 5. 로그인 셀렉터(`get_by_label("아이디")` 등)나 테이블 헤더 매칭이 실패하면, 에러 로그에 실제 헤더 목록이 함께 출력되므로 그 값을 보고 `xfile_client.py`의 셀렉터/헤더 라벨을 실제 화면에 맞게 수정한다.
+6. **페이지네이션 확인**: 지원자가 많은 공고(가능하면 10명 이상)에서, 콘솔에 출력된 수집 인원 수가 화면에 보이는 실제 지원자 수와 일치하는지 대조한다. 목록이 페이지 단위로 나뉘어 있다면 1페이지만 수집되고 있을 수 있다.
+7. **다중 테이블 확인**: 공고 페이지에 지원자 목록 표 외에 다른 표(예: A/B/C 필요인원 요약 표)가 함께 있는지 확인한다. 있다면 `xfile_client.py`의 `table = page.locator("table")`가 어느 표를 가리키는지 반드시 확인하고, 필요시 첫 번째 표로 한정하거나 더 구체적인 셀렉터로 교체한다.
+8. **로그인 실패 처리 확인**: 일부러 잘못된 비밀번호로 한 번 실행해서, 프로그램이 명확한 에러 메시지와 함께 종료 코드 1로 끝나는지 확인한다 (0명 수집 + 종료 코드 0으로 "성공"처럼 보이면 안 된다).
+9. 가능하면 공고 페이지에서 A/B/C 타입별 필요인원 표시 위치도 함께 확인해 기록해 둔다 (Phase 2 선발 엔진에서 필요).
 
 ---
 
