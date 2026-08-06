@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from playwright.sync_api import Page
+
+logger = logging.getLogger(__name__)
 
 EXPECTED_COLUMNS: list[tuple[str, str]] = [
     ("no.", "no"),
@@ -32,6 +36,7 @@ def login(page: Page, login_url: str, username: str, password: str) -> None:
     page.get_by_label("아이디").fill(username)
     page.get_by_label("비밀번호").fill(password)
     page.get_by_role("button", name="로그인").click()
+    page.wait_for_load_state("networkidle")
 
     error_message = page.get_by_text("아이디 또는 비밀번호가 일치하지 않습니다")
     if error_message.count() > 0:
@@ -40,6 +45,7 @@ def login(page: Page, login_url: str, username: str, password: str) -> None:
 
 def scrape_posting_applicants(page: Page, posting_url: str) -> list[dict[str, str]]:
     page.goto(posting_url)
+    page.wait_for_load_state("networkidle")
 
     table = page.locator("table")
     if table.count() == 0:
@@ -58,6 +64,14 @@ def scrape_posting_applicants(page: Page, posting_url: str) -> list[dict[str, st
     row_locators = table.locator("tbody tr")
     for i in range(row_locators.count()):
         cells = row_locators.nth(i).locator("td").all_inner_texts()
+        if len(cells) < len(EXPECTED_COLUMNS):
+            logger.warning(
+                "행의 셀 수가 예상보다 적어 스킵: %s (예상 %d, 실제 %d)",
+                posting_url,
+                len(EXPECTED_COLUMNS),
+                len(cells),
+            )
+            continue
         row = {key: cells[header_index[label]].strip() for label, key in EXPECTED_COLUMNS}
         rows.append(row)
 
