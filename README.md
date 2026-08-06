@@ -10,4 +10,4 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-주의: `playwright install chromium`은 macOS 12 이상에서는 지원되지 않습니다. Task 4에서 playwright 기능을 구현할 때 필요한 경우 다시 시도하세요.
+주의: `requirements.txt`의 `playwright==1.50.0`은 Python 3.13과 macOS 12에서 모두 정상 작동하는 버전입니다. 더 새로운 버전은 macOS 12 지원이 중단되었으므로 이 버전 고정이 필요합니다.
