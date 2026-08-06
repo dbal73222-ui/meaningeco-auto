@@ -1,3 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-selection"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "playwright==1.50.0",
+    "python-dotenv==1.0.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

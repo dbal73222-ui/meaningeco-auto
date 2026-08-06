@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +33,18 @@ class XfilePageError(Exception):
 
 
 def login(page: Page, login_url: str, username: str, password: str) -> None:
-    page.goto(login_url)
-    page.get_by_label("아이디").fill(username)
-    page.get_by_label("비밀번호").fill(password)
-    page.get_by_role("button", name="로그인").click()
-    page.wait_for_load_state("networkidle")
+    # 실제 화면 마크업이 가정과 달라 요소를 못 찾으면 Playwright 기본 타임아웃 후
+    # 원시 TimeoutError가 그대로 새어나가므로, 명확한 로그인 실패로 감싸서 재발생시킴
+    try:
+        page.goto(login_url)
+        page.get_by_label("아이디").fill(username)
+        page.get_by_label("비밀번호").fill(password)
+        page.get_by_role("button", name="로그인").click()
+        page.wait_for_load_state("networkidle")
+    except PlaywrightTimeoutError as exc:
+        raise XfileLoginError(
+            "로그인 폼을 찾을 수 없습니다 — 화면 구조가 예상과 다를 수 있습니다."
+        ) from exc
 
     error_message = page.get_by_text("아이디 또는 비밀번호가 일치하지 않습니다")
     if error_message.count() > 0:
@@ -47,9 +55,11 @@ def scrape_posting_applicants(page: Page, posting_url: str) -> list[dict[str, st
     page.goto(posting_url)
     page.wait_for_load_state("networkidle")
 
-    table = page.locator("table")
-    if table.count() == 0:
+    all_tables = page.locator("table")
+    if all_tables.count() == 0:
         raise XfilePageError(f"지원자 테이블을 찾을 수 없습니다: {posting_url}")
+    # 공고 페이지에 A/B/C 필요인원 등 다른 표가 함께 있을 수 있어 첫 번째 표로 한정
+    table = all_tables.first
 
     header_cells = table.locator("thead th").all_inner_texts()
     header_index = {text.strip(): idx for idx, text in enumerate(header_cells)}
@@ -64,7 +74,7 @@ def scrape_posting_applicants(page: Page, posting_url: str) -> list[dict[str, st
     row_locators = table.locator("tbody tr")
     for i in range(row_locators.count()):
         cells = row_locators.nth(i).locator("td").all_inner_texts()
-        if len(cells) < len(EXPECTED_COLUMNS):
+        if len(cells) <= max(header_index.values()):
             logger.warning(
                 "행의 셀 수가 예상보다 적어 스킵: %s (예상 %d, 실제 %d)",
                 posting_url,

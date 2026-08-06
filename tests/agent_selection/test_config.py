@@ -16,6 +16,7 @@ def test_load_config_success(tmp_path, monkeypatch):
         "XFILE_PASSWORD",
         "XFILE_POSTING_URLS",
         "XFILE_HEADLESS",
+        "XFILE_OUTPUT_DIR",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -43,6 +44,7 @@ def test_load_config_missing_username_raises(tmp_path, monkeypatch):
         "XFILE_USERNAME",
         "XFILE_PASSWORD",
         "XFILE_POSTING_URLS",
+        "XFILE_OUTPUT_DIR",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -55,3 +57,52 @@ def test_load_config_missing_username_raises(tmp_path, monkeypatch):
 
     with pytest.raises(ConfigError, match="XFILE_USERNAME"):
         load_config(env_path=str(env_file))
+
+
+def test_load_config_output_dir_explicit_is_respected(tmp_path, monkeypatch):
+    for key in (
+        "XFILE_LOGIN_URL",
+        "XFILE_USERNAME",
+        "XFILE_PASSWORD",
+        "XFILE_POSTING_URLS",
+        "XFILE_HEADLESS",
+        "XFILE_OUTPUT_DIR",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    env_file = _write_env(
+        tmp_path,
+        "XFILE_LOGIN_URL=https://admin.example.com/login\n"
+        "XFILE_USERNAME=tester\n"
+        "XFILE_PASSWORD=secret\n"
+        "XFILE_POSTING_URLS=https://a.example.com\n"
+        "XFILE_OUTPUT_DIR=custom_output\n",
+    )
+
+    config = load_config(env_path=str(env_file))
+
+    assert config.output_dir == "custom_output"
+
+
+def test_load_config_output_dir_defaults_to_output(tmp_path, monkeypatch):
+    for key in (
+        "XFILE_LOGIN_URL",
+        "XFILE_USERNAME",
+        "XFILE_PASSWORD",
+        "XFILE_POSTING_URLS",
+        "XFILE_HEADLESS",
+        "XFILE_OUTPUT_DIR",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    env_file = _write_env(
+        tmp_path,
+        "XFILE_LOGIN_URL=https://admin.example.com/login\n"
+        "XFILE_USERNAME=tester\n"
+        "XFILE_PASSWORD=secret\n"
+        "XFILE_POSTING_URLS=https://a.example.com\n",
+    )
+
+    config = load_config(env_path=str(env_file))
+
+    assert config.output_dir == "output"

@@ -5,7 +5,9 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-VALID_ROLE_TYPES = {"A", "B", "C"}
+# output.py도 동일 값을 참조하므로 여기서 단일 정의하고 파생시킴 (역할타입 중복 정의 방지)
+ROLE_TYPES: tuple[str, ...] = ("A", "B", "C")
+VALID_ROLE_TYPES = frozenset(ROLE_TYPES)
 
 
 class ApplicantParseError(Exception):

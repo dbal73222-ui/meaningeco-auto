@@ -6,9 +6,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from agent_selection.applicant_parser import Applicant
-
-ROLE_TYPES = ("A", "B", "C")
+from agent_selection.applicant_parser import ROLE_TYPES, Applicant
 
 
 def save_results(

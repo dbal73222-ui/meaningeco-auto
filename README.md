@@ -2,12 +2,35 @@
 
 가상환경은 반드시 Python 3.13으로 생성하세요 (`/usr/local/bin/python3.13 -m venv .venv`) — 3.14에서는 playwright의 greenlet 의존성이 빌드되지 않습니다.
 
-## 환경 설정
+## 설치
 
 ```bash
 /usr/local/bin/python3.13 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
-주의: `requirements.txt`의 `playwright==1.50.0`은 Python 3.13과 macOS 12에서 모두 정상 작동하는 버전입니다. 더 새로운 버전은 macOS 12 지원이 중단되었으므로 이 버전 고정이 필요합니다.
+주의: `playwright==1.50.0`은 Python 3.13과 macOS 12에서 모두 정상 작동하는 버전으로 고정되어 있습니다 (`pyproject.toml` 참고). 더 새로운 버전은 macOS 12 지원이 중단되었으므로 임의로 올리지 마세요.
+
+## 환경 설정
+
+`.env.example`을 `.env`로 복사한 뒤 값을 채웁니다.
+
+- `XFILE_POSTING_URLS`: 수집할 공고가 여러 개면 콤마(`,`)로 구분해 나열합니다.
+- `XFILE_HEADLESS=false`: 처음 실행할 때는 브라우저 동작을 눈으로 확인할 수 있도록 권장합니다.
+
+## 실행
+
+저장소 루트에서 `.env`가 있는 상태로 실행합니다.
+
+```bash
+.venv/bin/python -m agent_selection.main
+```
+
+## 결과물
+
+`output/YYYYMMDD_HHMMSS.json`, `output/YYYYMMDD_HHMMSS.csv` (현재 작업 디렉터리 기준, `XFILE_OUTPUT_DIR`로 경로 변경 가능)에 저장됩니다.
+
+## 참고
+
+`xfile_client.py`의 셀렉터와 컬럼 라벨은 실사이트 소스 접근 없이 추정한 값이라 첫 실사이트 실행 후 조정이 필요할 수 있습니다. 자세한 내용은 계획 문서의 Task 4 노트를 참고하세요.

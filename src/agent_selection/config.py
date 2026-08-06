@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
@@ -14,9 +14,11 @@ class ConfigError(Exception):
 class Config:
     login_url: str
     username: str
-    password: str
+    # 실수로 print/log 되어도 비밀번호가 노출되지 않도록 repr에서 제외
+    password: str = field(repr=False)
     posting_urls: tuple[str, ...]
     headless: bool
+    output_dir: str
 
 
 def load_config(env_path: str | None = None) -> Config:
@@ -27,6 +29,8 @@ def load_config(env_path: str | None = None) -> Config:
     password = os.getenv("XFILE_PASSWORD", "").strip()
     posting_urls_raw = os.getenv("XFILE_POSTING_URLS", "").strip()
     headless_raw = os.getenv("XFILE_HEADLESS", "true").strip().lower()
+    # 출력 경로는 필수값이 아니므로 미설정시 기본값 "output"으로 대체
+    output_dir = os.getenv("XFILE_OUTPUT_DIR", "output").strip() or "output"
 
     if not login_url:
         raise ConfigError("XFILE_LOGIN_URL이 설정되지 않았습니다.")
@@ -47,4 +51,5 @@ def load_config(env_path: str | None = None) -> Config:
         password=password,
         posting_urls=posting_urls,
         headless=headless_raw != "false",
+        output_dir=output_dir,
     )

@@ -16,11 +16,13 @@ from agent_selection.xfile_client import (
     scrape_posting_applicants,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def run() -> int:
+    # 모듈 import만으로 root logger가 재설정되지 않도록 실행 시점으로 이동
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
     try:
         config = load_config()
     except ConfigError as exc:
@@ -49,7 +51,10 @@ def run() -> int:
                 skipped_postings.append(posting_url)
                 continue
 
-            all_applicants.extend(parse_applicant_rows(raw_rows, posting_url))
+            parsed = parse_applicant_rows(raw_rows, posting_url)
+            all_applicants.extend(parsed)
+            # 페이지네이션으로 일부만 수집됐을 가능성을 운영자가 화면과 대조할 수 있도록 기록
+            logger.info("공고 %s: %d명 수집", posting_url, len(raw_rows))
 
         browser.close()
 
@@ -59,7 +64,7 @@ def run() -> int:
         for url in skipped_postings:
             print(f"  - {url}")
 
-    json_path, csv_path = save_results(all_applicants, Path("output"))
+    json_path, csv_path = save_results(all_applicants, Path(config.output_dir))
     print(f"저장 완료: {json_path}, {csv_path}")
 
     return 0
