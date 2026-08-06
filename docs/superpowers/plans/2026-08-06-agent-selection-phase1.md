@@ -39,10 +39,12 @@
 
 `requirements.txt`:
 ```
-playwright==1.47.0
+playwright==1.50.0
 python-dotenv==1.0.1
 pytest==8.3.3
 ```
+
+> **환경 노트 (Task 1 리뷰 중 확정):** 이 머신은 macOS 12.7.6이라 Playwright 최신 버전(1.6x)은 `playwright install chromium`이 "does not support chromium on mac12"로 거부한다. `playwright==1.47.0`이 의존하는 `greenlet==3.0.3`은 Python 3.13/3.14 모두에서 사전빌드 휠이 없어 컴파일 실패한다. 실측 검증 결과 `playwright==1.50.0`(greenlet 3.5.4 사전빌드 휠 사용)이 Python 3.13에서 빌드되고 macOS 12에서 Chromium 다운로드·실행까지 정상 동작하는 유일한 조합이었다. 반드시 `playwright==1.50.0`을 사용할 것.
 
 `.env.example`:
 ```
