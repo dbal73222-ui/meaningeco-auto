@@ -110,6 +110,14 @@ def test_render_html_handles_empty_applicant_list():
     assert "총 0명" in html
 
 
+def test_render_html_escapes_script_close_tag_in_applicant_data():
+    rows = [{**SAMPLE_ROWS[0], "name": "</script><script>alert(1)</script>"}]
+
+    html = render_html(rows, "2026-08-10 14:30:00")
+
+    assert "</script><script>alert(1)</script>" not in html
+
+
 def test_render_empty_html_shows_guidance_message():
     html = render_empty_html()
 

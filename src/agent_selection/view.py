@@ -130,6 +130,12 @@ _EMPTY_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def _safe_json(value: object) -> str:
+    # 지원자 이름 등 외부 입력값에 "</script>"가 들어있으면 <script> 블록이 조기 종료되므로
+    # "<"를 유니코드 이스케이프로 바꿔 HTML 파서가 스크립트 태그로 오인하지 않게 함
+    return json.dumps(value, ensure_ascii=False).replace("<", "\\u003c")
+
+
 def render_html(applicants: list[dict], collected_at: str) -> str:
     rows = [{col: applicant.get(col, "") for col in VIEW_COLUMNS} for applicant in applicants]
     role_buttons = '<button data-role="ALL" class="active">전체</button>' + "".join(
@@ -143,8 +149,8 @@ def render_html(applicants: list[dict], collected_at: str) -> str:
         collected_at=collected_at,
         role_buttons=role_buttons,
         table_headers=table_headers,
-        data_json=json.dumps(rows, ensure_ascii=False),
-        columns_json=json.dumps(columns, ensure_ascii=False),
+        data_json=_safe_json(rows),
+        columns_json=_safe_json(columns),
     )
 
 
@@ -183,7 +189,8 @@ def main() -> int:
 
     view_path = output_dir / "view.html"
     view_path.write_text(html, encoding="utf-8")
-    webbrowser.open(f"file://{view_path.resolve()}")
+    # f-string으로 직접 조립하면 경로에 공백/한글이 있을 때 URL이 깨짐 (as_uri가 퍼센트 인코딩 처리)
+    webbrowser.open(view_path.resolve().as_uri())
     logger.info("결과 화면 생성 완료: %s", view_path)
 
     return 0
