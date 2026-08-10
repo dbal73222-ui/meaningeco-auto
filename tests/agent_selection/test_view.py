@@ -5,7 +5,14 @@ import pytest
 
 from agent_selection.applicant_parser import Applicant
 from agent_selection.output import save_results
-from agent_selection.view import ViewError, find_latest_result, load_applicants
+from agent_selection.view import (
+    ViewError,
+    find_latest_result,
+    format_collected_at,
+    load_applicants,
+    render_empty_html,
+    render_html,
+)
 
 SAMPLE_APPLICANT = Applicant(
     no="1",
@@ -54,3 +61,61 @@ def test_load_applicants_raises_view_error_on_broken_json(tmp_path: Path):
 
     with pytest.raises(ViewError):
         load_applicants(broken_path)
+
+
+SAMPLE_ROWS = [
+    {
+        "no": "1",
+        "name": "홍길동",
+        "phone": "010-1234-5678",
+        "role_type": "A",
+        "participation_count": 3,
+        "status": "대기",
+        "applied_at": "2026-08-01 10:00",
+    },
+    {
+        "no": "2",
+        "name": "김철수",
+        "phone": "010-9999-0000",
+        "role_type": "B",
+        "participation_count": 0,
+        "status": "합격",
+        "applied_at": "2026-08-02 11:00",
+    },
+]
+
+
+def test_render_html_includes_applicant_values():
+    html = render_html(SAMPLE_ROWS, "2026-08-10 14:30:00")
+
+    assert "홍길동" in html
+    assert "010-1234-5678" in html
+    assert "총 2명" in html
+    assert "2026-08-10 14:30:00" in html
+
+
+def test_render_html_includes_role_type_filter_buttons():
+    html = render_html(SAMPLE_ROWS, "2026-08-10 14:30:00")
+
+    assert 'data-role="A"' in html
+    assert 'data-role="B"' in html
+    assert 'data-role="C"' in html
+
+
+def test_render_html_handles_empty_applicant_list():
+    html = render_html([], "2026-08-10 14:30:00")
+
+    assert "총 0명" in html
+
+
+def test_render_empty_html_shows_guidance_message():
+    html = render_empty_html()
+
+    assert "아직 수집된 데이터가 없습니다" in html
+    assert "agent_selection.main" in html
+
+
+def test_format_collected_at_formats_timestamp_stem(tmp_path: Path):
+    json_path = tmp_path / "20260810_143000.json"
+
+    assert format_collected_at(json_path) == "2026-08-10 14:30:00"
