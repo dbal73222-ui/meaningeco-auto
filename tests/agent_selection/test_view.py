@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
+import agent_selection.view as view_module
 from agent_selection.applicant_parser import Applicant
+from agent_selection.config import Config, ConfigError
 from agent_selection.output import save_results
 from agent_selection.view import (
     ViewError,
@@ -119,3 +121,68 @@ def test_format_collected_at_formats_timestamp_stem(tmp_path: Path):
     json_path = tmp_path / "20260810_143000.json"
 
     assert format_collected_at(json_path) == "2026-08-10 14:30:00"
+
+
+def _make_config(output_dir: Path) -> Config:
+    return Config(
+        login_url="https://example.com",
+        username="user",
+        password="pw",
+        posting_urls=("https://example.com/posting/1",),
+        headless=True,
+        output_dir=str(output_dir),
+    )
+
+
+def test_main_opens_browser_with_latest_result(tmp_path, monkeypatch):
+    save_results([SAMPLE_APPLICANT], tmp_path, timestamp="20260806_100000")
+    monkeypatch.setattr(view_module, "load_config", lambda: _make_config(tmp_path))
+    opened_urls = []
+    monkeypatch.setattr(view_module.webbrowser, "open", lambda url: opened_urls.append(url))
+
+    exit_code = view_module.main()
+
+    assert exit_code == 0
+    view_path = tmp_path / "view.html"
+    assert view_path.exists()
+    assert "홍길동" in view_path.read_text(encoding="utf-8")
+    assert opened_urls and opened_urls[0].startswith("file://")
+
+
+def test_main_shows_empty_guidance_when_no_results(tmp_path, monkeypatch):
+    monkeypatch.setattr(view_module, "load_config", lambda: _make_config(tmp_path))
+    opened_urls = []
+    monkeypatch.setattr(view_module.webbrowser, "open", lambda url: opened_urls.append(url))
+
+    exit_code = view_module.main()
+
+    assert exit_code == 0
+    view_path = tmp_path / "view.html"
+    assert "아직 수집된 데이터가 없습니다" in view_path.read_text(encoding="utf-8")
+    assert opened_urls
+
+
+def test_main_returns_1_on_config_error(monkeypatch):
+    def _raise_config_error():
+        raise ConfigError("설정 없음")
+
+    monkeypatch.setattr(view_module, "load_config", _raise_config_error)
+    opened_urls = []
+    monkeypatch.setattr(view_module.webbrowser, "open", lambda url: opened_urls.append(url))
+
+    exit_code = view_module.main()
+
+    assert exit_code == 1
+    assert opened_urls == []
+
+
+def test_main_returns_1_on_broken_result_file(tmp_path, monkeypatch):
+    (tmp_path / "20260806_100000.json").write_text("{이건 json이 아님", encoding="utf-8")
+    monkeypatch.setattr(view_module, "load_config", lambda: _make_config(tmp_path))
+    opened_urls = []
+    monkeypatch.setattr(view_module.webbrowser, "open", lambda url: opened_urls.append(url))
+
+    exit_code = view_module.main()
+
+    assert exit_code == 1
+    assert opened_urls == []

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
+import webbrowser
 from pathlib import Path
 from string import Template
 
 from agent_selection.applicant_parser import ROLE_TYPES
+from agent_selection.config import ConfigError, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -153,3 +156,38 @@ def format_collected_at(json_path: Path) -> str:
     # save_results가 만드는 고정 포맷 "YYYYMMDD_HHMMSS"을 사람이 읽기 좋게 변환
     ts = json_path.stem
     return f"{ts[0:4]}-{ts[4:6]}-{ts[6:8]} {ts[9:11]}:{ts[11:13]}:{ts[13:15]}"
+
+
+def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        logger.error("설정 오류: %s", exc)
+        return 1
+
+    output_dir = Path(config.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    latest = find_latest_result(output_dir)
+
+    if latest is None:
+        html = render_empty_html()
+    else:
+        try:
+            applicants = load_applicants(latest)
+        except ViewError as exc:
+            logger.error("%s", exc)
+            return 1
+        html = render_html(applicants, format_collected_at(latest))
+
+    view_path = output_dir / "view.html"
+    view_path.write_text(html, encoding="utf-8")
+    webbrowser.open(f"file://{view_path.resolve()}")
+    logger.info("결과 화면 생성 완료: %s", view_path)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
