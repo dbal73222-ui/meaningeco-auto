@@ -88,7 +88,7 @@ let query = "";
 
 function render() {
   tbody.innerHTML = "";
-  DATA.filter(row => (activePosting === "ALL" || row.posting_title === activePosting))
+  DATA.filter(row => (activePosting === "ALL" || row.posting_url === activePosting))
       .filter(row => query === "" || row.name.includes(query) || row.phone.includes(query))
       .forEach(row => {
         const tr = document.createElement("tr");
@@ -139,19 +139,25 @@ def _safe_json(value: object) -> str:
 
 
 def render_html(applicants: list[dict], collected_at: str) -> str:
-    rows = [{col: applicant.get(col, "") for col in VIEW_COLUMNS} for applicant in applicants]
+    rows = [
+        {col: applicant.get(col, "") for col in VIEW_COLUMNS}
+        | {"posting_url": applicant.get("posting_url", "")}
+        for applicant in applicants
+    ]
 
-    # 공고명은 엑스파일 관리자가 입력하는 자유 텍스트라 HTML 특수문자가 섞일 수 있어 이스케이프 필요
-    posting_titles = sorted(
-        {
-            applicant.get("posting_title", "")
-            for applicant in applicants
-            if applicant.get("posting_title")
-        }
-    )
+    # 공고명이 같아도 다른 공고일 수 있어(예: 매달 반복되는 동일 제목 공고) URL을 필터 키로 쓰고
+    # 공고명은 사람이 읽을 라벨로만 사용. 공고명은 엑스파일 관리자가 입력하는 자유 텍스트라
+    # HTML 특수문자가 섞일 수 있어 이스케이프 필요
+    posting_titles_by_url: dict[str, str] = {}
+    for applicant in applicants:
+        url = applicant.get("posting_url", "")
+        title = applicant.get("posting_title", "")
+        if url:
+            posting_titles_by_url.setdefault(url, title)
+
     posting_buttons = '<button data-posting="ALL" class="active">전체</button>' + "".join(
-        f'<button data-posting="{html.escape(title)}">{html.escape(title)}</button>'
-        for title in posting_titles
+        f'<button data-posting="{html.escape(url)}">{html.escape(title)}</button>'
+        for url, title in sorted(posting_titles_by_url.items(), key=lambda item: item[1])
     )
     table_headers = "".join(f"<th>{VIEW_COLUMN_LABELS[col]}</th>" for col in VIEW_COLUMNS)
     columns = [{"key": col, "label": VIEW_COLUMN_LABELS[col]} for col in VIEW_COLUMNS]

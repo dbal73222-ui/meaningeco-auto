@@ -71,6 +71,7 @@ SAMPLE_ROWS = [
         "no": "1",
         "name": "홍길동",
         "phone": "010-1234-5678",
+        "posting_url": "https://a.example.com/1",
         "posting_title": "미화 공고",
         "role_type": "A",
         "participation_count": "3",
@@ -81,6 +82,7 @@ SAMPLE_ROWS = [
         "no": "2",
         "name": "김철수",
         "phone": "010-9999-0000",
+        "posting_url": "https://a.example.com/2",
         "posting_title": "다회용기 공고",
         "role_type": "",
         "participation_count": "",
@@ -102,9 +104,25 @@ def test_render_html_includes_applicant_values():
 def test_render_html_includes_posting_filter_buttons():
     html = render_html(SAMPLE_ROWS, "2026-08-10 14:30:00")
 
-    assert 'data-posting="미화 공고"' in html
-    assert 'data-posting="다회용기 공고"' in html
+    assert 'data-posting="https://a.example.com/1"' in html
+    assert 'data-posting="https://a.example.com/2"' in html
     assert 'data-posting="ALL"' in html
+    assert ">미화 공고<" in html
+    assert ">다회용기 공고<" in html
+
+
+def test_render_html_keeps_same_titled_postings_separate():
+    # 매달 반복되는 것처럼 제목은 같지만 URL(=실제 공고)이 다른 두 지원자
+    rows = [
+        {**SAMPLE_ROWS[0], "posting_url": "https://a.example.com/1", "posting_title": "미화 공고"},
+        {**SAMPLE_ROWS[1], "posting_url": "https://a.example.com/2", "posting_title": "미화 공고"},
+    ]
+
+    html = render_html(rows, "2026-08-10 14:30:00")
+
+    assert 'data-posting="https://a.example.com/1"' in html
+    assert 'data-posting="https://a.example.com/2"' in html
+    assert html.count(">미화 공고<") == 2
 
 
 def test_render_html_escapes_posting_title_html():

@@ -37,9 +37,14 @@ def save_results(
 
 def print_summary(applicants: list[Applicant]) -> None:
     print(f"총 수집 지원자: {len(applicants)}명")
-    posting_titles = sorted({applicant.posting_title for applicant in applicants})
-    for posting_title in posting_titles:
-        count = sum(1 for applicant in applicants if applicant.posting_title == posting_title)
-        print(f"  {posting_title}: {count}명")
+    # 공고명이 같아도 다른 공고일 수 있어(예: 매달 반복되는 동일 제목 공고) URL을 진짜 그룹 키로 사용
+    posting_titles_by_url: dict[str, str] = {}
+    for applicant in applicants:
+        posting_titles_by_url.setdefault(applicant.posting_url, applicant.posting_title)
+
+    for posting_url in sorted(posting_titles_by_url, key=lambda url: posting_titles_by_url[url]):
+        title = posting_titles_by_url[posting_url]
+        count = sum(1 for applicant in applicants if applicant.posting_url == posting_url)
+        print(f"  {title}: {count}명")
     for applicant in applicants:
         print(f"  [{applicant.no}] {applicant.name} / {applicant.posting_title} / {applicant.status}")
