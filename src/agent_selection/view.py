@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import logging
 import sys
@@ -7,7 +8,6 @@ import webbrowser
 from pathlib import Path
 from string import Template
 
-from agent_selection.applicant_parser import ROLE_TYPES
 from agent_selection.config import ConfigError, load_config
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ def load_applicants(json_path: Path) -> list[dict]:
 VIEW_COLUMNS: tuple[str, ...] = (
     "name",
     "phone",
+    "posting_title",
     "role_type",
     "participation_count",
     "status",
@@ -42,6 +43,7 @@ VIEW_COLUMNS: tuple[str, ...] = (
 VIEW_COLUMN_LABELS: dict[str, str] = {
     "name": "이름",
     "phone": "전화번호",
+    "posting_title": "공고명",
     "role_type": "역할타입",
     "participation_count": "참여횟수",
     "status": "지원상태",
@@ -57,7 +59,7 @@ _PAGE_TEMPLATE = Template("""<!DOCTYPE html>
 <style>
   body { font-family: -apple-system, sans-serif; margin: 2rem; }
   .summary { margin-bottom: 1rem; color: #555; }
-  .controls { margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center; }
+  .controls { margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .controls button { padding: 0.4rem 0.8rem; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; }
   .controls button.active { background: #333; color: #fff; }
   input[type=search] { padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; flex: 1; max-width: 240px; }
@@ -70,7 +72,7 @@ _PAGE_TEMPLATE = Template("""<!DOCTYPE html>
 <h1>지원자 목록</h1>
 <div class="summary">총 $total명 · 수집 시각 $collected_at</div>
 <div class="controls">
-  $role_buttons
+  $posting_buttons
   <input type="search" id="search" placeholder="이름 또는 전화번호 검색">
 </div>
 <table id="table">
@@ -81,12 +83,12 @@ _PAGE_TEMPLATE = Template("""<!DOCTYPE html>
 const DATA = $data_json;
 const COLUMNS = $columns_json;
 const tbody = document.querySelector("#table tbody");
-let activeRole = "ALL";
+let activePosting = "ALL";
 let query = "";
 
 function render() {
   tbody.innerHTML = "";
-  DATA.filter(row => (activeRole === "ALL" || row.role_type === activeRole))
+  DATA.filter(row => (activePosting === "ALL" || row.posting_url === activePosting))
       .filter(row => query === "" || row.name.includes(query) || row.phone.includes(query))
       .forEach(row => {
         const tr = document.createElement("tr");
@@ -99,10 +101,10 @@ function render() {
       });
 }
 
-document.querySelectorAll(".controls button[data-role]").forEach(btn => {
+document.querySelectorAll(".controls button[data-posting]").forEach(btn => {
   btn.addEventListener("click", () => {
-    activeRole = btn.dataset.role;
-    document.querySelectorAll(".controls button[data-role]").forEach(b => b.classList.remove("active"));
+    activePosting = btn.dataset.posting;
+    document.querySelectorAll(".controls button[data-posting]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     render();
   });
@@ -137,9 +139,25 @@ def _safe_json(value: object) -> str:
 
 
 def render_html(applicants: list[dict], collected_at: str) -> str:
-    rows = [{col: applicant.get(col, "") for col in VIEW_COLUMNS} for applicant in applicants]
-    role_buttons = '<button data-role="ALL" class="active">전체</button>' + "".join(
-        f'<button data-role="{role}">{role}</button>' for role in ROLE_TYPES
+    rows = [
+        {col: applicant.get(col, "") for col in VIEW_COLUMNS}
+        | {"posting_url": applicant.get("posting_url", "")}
+        for applicant in applicants
+    ]
+
+    # 공고명이 같아도 다른 공고일 수 있어(예: 매달 반복되는 동일 제목 공고) URL을 필터 키로 쓰고
+    # 공고명은 사람이 읽을 라벨로만 사용. 공고명은 엑스파일 관리자가 입력하는 자유 텍스트라
+    # HTML 특수문자가 섞일 수 있어 이스케이프 필요
+    posting_titles_by_url: dict[str, str] = {}
+    for applicant in applicants:
+        url = applicant.get("posting_url", "")
+        title = applicant.get("posting_title", "")
+        if url:
+            posting_titles_by_url.setdefault(url, title)
+
+    posting_buttons = '<button data-posting="ALL" class="active">전체</button>' + "".join(
+        f'<button data-posting="{html.escape(url)}">{html.escape(title)}</button>'
+        for url, title in sorted(posting_titles_by_url.items(), key=lambda item: item[1])
     )
     table_headers = "".join(f"<th>{VIEW_COLUMN_LABELS[col]}</th>" for col in VIEW_COLUMNS)
     columns = [{"key": col, "label": VIEW_COLUMN_LABELS[col]} for col in VIEW_COLUMNS]
@@ -147,7 +165,7 @@ def render_html(applicants: list[dict], collected_at: str) -> str:
     return _PAGE_TEMPLATE.substitute(
         total=len(applicants),
         collected_at=collected_at,
-        role_buttons=role_buttons,
+        posting_buttons=posting_buttons,
         table_headers=table_headers,
         data_json=_safe_json(rows),
         columns_json=_safe_json(columns),
@@ -178,17 +196,17 @@ def main() -> int:
     latest = find_latest_result(output_dir)
 
     if latest is None:
-        html = render_empty_html()
+        html_content = render_empty_html()
     else:
         try:
             applicants = load_applicants(latest)
         except ViewError as exc:
             logger.error("%s", exc)
             return 1
-        html = render_html(applicants, format_collected_at(latest))
+        html_content = render_html(applicants, format_collected_at(latest))
 
     view_path = output_dir / "view.html"
-    view_path.write_text(html, encoding="utf-8")
+    view_path.write_text(html_content, encoding="utf-8")
     # f-string으로 직접 조립하면 경로에 공백/한글이 있을 때 URL이 깨짐 (as_uri가 퍼센트 인코딩 처리)
     webbrowser.open(view_path.resolve().as_uri())
     logger.info("결과 화면 생성 완료: %s", view_path)

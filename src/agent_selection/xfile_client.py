@@ -54,11 +54,18 @@ def login(page: Page, login_url: str, username: str, password: str) -> None:
         raise XfileLoginError("로그인 실패: 아이디 또는 비밀번호를 확인하세요.")
 
 
-def scrape_posting_applicants(page: Page, posting_url: str) -> list[dict[str, str]]:
+def scrape_posting_applicants(page: Page, posting_url: str) -> tuple[str, list[dict[str, str]]]:
     # 지원자 목록 화면은 표가 아닌 카드 형태라 DOM 스크래핑이 불가능함(실사이트 확인 결과).
     # 대신 "엑셀 다운로드" 버튼이 커스텀옵션까지 포함된 CSV를 제공해 이를 내려받아 파싱함
     page.goto(posting_url)
     page.wait_for_load_state("networkidle")
+
+    # 공고 제목은 실사이트에서 이 클래스 조합의 div에만 들어있는 것을 확인함
+    # (Tailwind 유틸리티 클래스 기반이라 사이트 스타일이 바뀌면 셀렉터가 깨질 수 있음)
+    try:
+        title = page.locator(".text-lg.font-semibold").first.inner_text().strip()
+    except PlaywrightTimeoutError as exc:
+        raise XfilePageError(f"공고 제목을 찾을 수 없습니다: {posting_url}") from exc
 
     try:
         with page.expect_download(timeout=30000) as download_info:
@@ -85,4 +92,4 @@ def scrape_posting_applicants(page: Page, posting_url: str) -> list[dict[str, st
             continue
         rows.append({key: (raw_row[label] or "").strip() for label, key in EXPECTED_COLUMNS})
 
-    return rows
+    return title, rows

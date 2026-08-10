@@ -39,7 +39,7 @@ pip install -e .
 .venv/bin/python -m agent_selection.view
 ```
 
-- 역할타입(A/B/C) 버튼과 이름/전화번호 검색으로 걸러볼 수 있습니다.
+- 공고별 필터 버튼과 이름/전화번호 검색으로 걸러볼 수 있습니다.
 - 읽기 전용 화면입니다 — 여기서 클릭해도 엑스파일 사이트에는 어떤 영향도 없습니다.
 - 아직 수집 결과가 없으면 안내 메시지가 뜹니다. 먼저 `python -m agent_selection.main`을 실행하세요.
 

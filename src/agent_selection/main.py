@@ -45,16 +45,16 @@ def run() -> int:
 
         for posting_url in config.posting_urls:
             try:
-                raw_rows = scrape_posting_applicants(page, posting_url)
+                posting_title, raw_rows = scrape_posting_applicants(page, posting_url)
             except XfilePageError as exc:
                 logger.warning("공고 스킵: %s", exc)
                 skipped_postings.append(posting_url)
                 continue
 
-            parsed = parse_applicant_rows(raw_rows, posting_url)
+            parsed = parse_applicant_rows(raw_rows, posting_url, posting_title)
             all_applicants.extend(parsed)
             # 페이지네이션으로 일부만 수집됐을 가능성을 운영자가 화면과 대조할 수 있도록 기록
-            logger.info("공고 %s: %d명 수집", posting_url, len(raw_rows))
+            logger.info("공고 %s (%s): %d명 수집", posting_title, posting_url, len(raw_rows))
 
         browser.close()
 
