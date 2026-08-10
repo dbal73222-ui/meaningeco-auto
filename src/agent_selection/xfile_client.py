@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
 import logging
+from pathlib import Path
 
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -37,7 +40,7 @@ def login(page: Page, login_url: str, username: str, password: str) -> None:
     # 원시 TimeoutError가 그대로 새어나가므로, 명확한 로그인 실패로 감싸서 재발생시킴
     try:
         page.goto(login_url)
-        page.get_by_label("아이디").fill(username)
+        page.get_by_label("이메일").fill(username)
         page.get_by_label("비밀번호").fill(password)
         page.get_by_role("button", name="로그인").click()
         page.wait_for_load_state("networkidle")
@@ -52,37 +55,34 @@ def login(page: Page, login_url: str, username: str, password: str) -> None:
 
 
 def scrape_posting_applicants(page: Page, posting_url: str) -> list[dict[str, str]]:
+    # 지원자 목록 화면은 표가 아닌 카드 형태라 DOM 스크래핑이 불가능함(실사이트 확인 결과).
+    # 대신 "엑셀 다운로드" 버튼이 커스텀옵션까지 포함된 CSV를 제공해 이를 내려받아 파싱함
     page.goto(posting_url)
     page.wait_for_load_state("networkidle")
 
-    all_tables = page.locator("table")
-    if all_tables.count() == 0:
-        raise XfilePageError(f"지원자 테이블을 찾을 수 없습니다: {posting_url}")
-    # 공고 페이지에 A/B/C 필요인원 등 다른 표가 함께 있을 수 있어 첫 번째 표로 한정
-    table = all_tables.first
+    try:
+        with page.expect_download(timeout=30000) as download_info:
+            page.get_by_text("엑셀 다운로드").click()
+    except PlaywrightTimeoutError as exc:
+        raise XfilePageError(f"지원자 목록 다운로드에 실패했습니다: {posting_url}") from exc
 
-    header_cells = table.locator("thead th").all_inner_texts()
-    header_index = {text.strip(): idx for idx, text in enumerate(header_cells)}
+    download_path = download_info.value.path()
+    # 브라우저가 저장한 파일이 BOM 포함 UTF-8 CSV라 utf-8-sig로 읽어 BOM을 제거
+    csv_text = Path(download_path).read_text(encoding="utf-8-sig")
 
-    missing = [label for label, _ in EXPECTED_COLUMNS if label not in header_index]
+    reader = csv.DictReader(io.StringIO(csv_text))
+    header_fields = reader.fieldnames or []
+    missing = [label for label, _ in EXPECTED_COLUMNS if label not in header_fields]
     if missing:
         raise XfilePageError(
-            f"예상 컬럼을 찾을 수 없습니다 {missing} (실제 헤더: {header_cells})"
+            f"예상 컬럼을 찾을 수 없습니다 {missing} (실제 헤더: {header_fields})"
         )
 
     rows: list[dict[str, str]] = []
-    row_locators = table.locator("tbody tr")
-    for i in range(row_locators.count()):
-        cells = row_locators.nth(i).locator("td").all_inner_texts()
-        if len(cells) <= max(header_index.values()):
-            logger.warning(
-                "행의 셀 수가 예상보다 적어 스킵: %s (예상 %d, 실제 %d)",
-                posting_url,
-                len(EXPECTED_COLUMNS),
-                len(cells),
-            )
+    for raw_row in reader:
+        if any(raw_row.get(label) is None for label, _ in EXPECTED_COLUMNS):
+            logger.warning("행의 컬럼 수가 예상과 달라 스킵: %s", posting_url)
             continue
-        row = {key: cells[header_index[label]].strip() for label, key in EXPECTED_COLUMNS}
-        rows.append(row)
+        rows.append({key: (raw_row[label] or "").strip() for label, key in EXPECTED_COLUMNS})
 
     return rows
