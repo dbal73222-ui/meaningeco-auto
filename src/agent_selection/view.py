@@ -48,6 +48,7 @@ VIEW_COLUMN_LABELS: dict[str, str] = {
     "applied_at": "지원일시",
 }
 
+
 def group_pending_by_schedule(applicants: list[dict]) -> list[dict]:
     # 참여횟수는 외부 경력을 반영 못하므로 그룹/정렬 기준에서 제외 (표시 컬럼으로만 유지)
     groups: dict[str, list[dict]] = {}
