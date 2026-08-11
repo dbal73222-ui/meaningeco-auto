@@ -11,6 +11,7 @@ from agent_selection.view import (
     ViewError,
     find_latest_result,
     format_collected_at,
+    group_pending_by_schedule,
     load_applicants,
     render_empty_html,
     render_html,
@@ -90,6 +91,104 @@ SAMPLE_ROWS = [
         "applied_at": "2026-08-02 11:00",
     },
 ]
+
+
+def _raw_applicant(status: str, selected_schedule: str, applied_at: str, name: str = "홍길동") -> dict:
+    return {
+        "name": name,
+        "phone": "010-0000-0000",
+        "posting_title": "미화 공고",
+        "role_type": "A",
+        "participation_count": "3",
+        "status": status,
+        "applied_at": applied_at,
+        "selected_schedule": selected_schedule,
+    }
+
+
+def test_group_pending_by_schedule_filters_non_pending():
+    applicants = [
+        _raw_applicant("대기", "1일차", "2026-08-01 10:00"),
+        _raw_applicant("합격", "1일차", "2026-08-01 11:00"),
+    ]
+
+    result = group_pending_by_schedule(applicants)
+
+    assert len(result) == 1
+    assert len(result[0]["applicants"]) == 1
+
+
+def test_group_pending_by_schedule_groups_by_selected_schedule():
+    applicants = [
+        _raw_applicant("대기", "1일차", "2026-08-01 10:00", name="홍길동"),
+        _raw_applicant("대기", "2일차", "2026-08-01 11:00", name="김철수"),
+    ]
+
+    result = group_pending_by_schedule(applicants)
+
+    schedules = [group["schedule"] for group in result]
+    assert schedules == ["1일차", "2일차"]
+
+
+def test_group_pending_by_schedule_empty_schedule_becomes_unspecified():
+    applicants = [_raw_applicant("대기", "", "2026-08-01 10:00")]
+
+    result = group_pending_by_schedule(applicants)
+
+    assert result[0]["schedule"] == "미지정"
+
+
+def test_group_pending_by_schedule_sorts_within_group_by_applied_at():
+    applicants = [
+        _raw_applicant("대기", "1일차", "2026-08-02 09:00", name="나중지원"),
+        _raw_applicant("대기", "1일차", "2026-08-01 09:00", name="먼저지원"),
+    ]
+
+    result = group_pending_by_schedule(applicants)
+
+    names = [row["name"] for row in result[0]["applicants"]]
+    assert names == ["먼저지원", "나중지원"]
+
+
+def test_group_pending_by_schedule_puts_unspecified_group_last():
+    applicants = [
+        _raw_applicant("대기", "", "2026-08-01 10:00"),
+        _raw_applicant("대기", "1일차", "2026-08-01 11:00"),
+    ]
+
+    result = group_pending_by_schedule(applicants)
+
+    schedules = [group["schedule"] for group in result]
+    assert schedules == ["1일차", "미지정"]
+
+
+def test_group_pending_by_schedule_projects_view_columns_only():
+    applicants = [_raw_applicant("대기", "1일차", "2026-08-01 10:00")]
+
+    result = group_pending_by_schedule(applicants)
+
+    row = result[0]["applicants"][0]
+    assert set(row.keys()) == {
+        "name", "phone", "posting_title", "role_type",
+        "participation_count", "status", "applied_at",
+    }
+
+
+def test_group_pending_by_schedule_ignores_participation_count_in_order():
+    # 참여횟수가 높아도(9) 지원일시가 늦으면 뒤로 가야 함 — 참여횟수는 정렬 기준이 아님
+    high_count_but_later = {
+        **_raw_applicant("대기", "1일차", "2026-08-02 09:00", name="많이참여"),
+        "participation_count": "9",
+    }
+    low_count_but_earlier = {
+        **_raw_applicant("대기", "1일차", "2026-08-01 09:00", name="적게참여"),
+        "participation_count": "0",
+    }
+
+    result = group_pending_by_schedule([high_count_but_later, low_count_but_earlier])
+
+    names = [row["name"] for row in result[0]["applicants"]]
+    assert names == ["적게참여", "많이참여"]
 
 
 def test_render_html_includes_applicant_values():

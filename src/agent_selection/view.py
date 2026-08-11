@@ -50,6 +50,25 @@ VIEW_COLUMN_LABELS: dict[str, str] = {
     "applied_at": "지원일시",
 }
 
+def group_pending_by_schedule(applicants: list[dict]) -> list[dict]:
+    # 참여횟수는 외부 경력을 반영 못하므로 그룹/정렬 기준에서 제외 (표시 컬럼으로만 유지)
+    groups: dict[str, list[dict]] = {}
+    for applicant in applicants:
+        if applicant.get("status") != "대기":
+            continue
+        schedule = applicant.get("selected_schedule") or "미지정"
+        row = {col: applicant.get(col, "") for col in VIEW_COLUMNS}
+        groups.setdefault(schedule, []).append(row)
+
+    for rows in groups.values():
+        rows.sort(key=lambda row: row.get("applied_at", ""))
+
+    return [
+        {"schedule": schedule, "applicants": groups[schedule]}
+        for schedule in sorted(groups, key=lambda s: (s == "미지정", s))
+    ]
+
+
 # $ 치환만 처리하므로 CSS/JS의 중괄호를 이스케이프할 필요가 없음 (f-string 대비 안전)
 _PAGE_TEMPLATE = Template("""<!DOCTYPE html>
 <html lang="ko">
