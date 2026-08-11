@@ -238,6 +238,34 @@ def test_render_html_handles_empty_applicant_list():
     assert "총 0명" in html
 
 
+def test_render_html_includes_recommend_toggle_button():
+    html = render_html(SAMPLE_ROWS, "2026-08-10 14:30:00")
+
+    assert 'id="toggle-recommend"' in html
+    assert "추천 보기" in html
+
+
+def test_render_html_includes_recommend_notice_text():
+    html = render_html(SAMPLE_ROWS, "2026-08-10 14:30:00")
+
+    assert "실제 승인/거절은 엑스파일에서 직접 진행하세요" in html
+
+
+def test_render_html_embeds_pending_schedule_groups():
+    html = render_html(SAMPLE_ROWS, "2026-08-10 14:30:00")
+
+    assert '"schedule": "미지정"' in html
+    assert '"name": "홍길동"' in html
+
+
+def test_render_html_embeds_empty_recommend_groups_when_no_pending():
+    rows = [{**SAMPLE_ROWS[0], "status": "합격"}]
+
+    html = render_html(rows, "2026-08-10 14:30:00")
+
+    assert "const RECOMMEND_GROUPS = [];" in html
+
+
 def test_render_html_escapes_script_close_tag_in_applicant_data():
     rows = [{**SAMPLE_ROWS[0], "name": "</script><script>alert(1)</script>"}]
 

@@ -78,29 +78,43 @@ _PAGE_TEMPLATE = Template("""<!DOCTYPE html>
 <style>
   body { font-family: -apple-system, sans-serif; margin: 2rem; }
   .summary { margin-bottom: 1rem; color: #555; }
+  .mode-toggle { margin-bottom: 1rem; }
+  .mode-toggle button { padding: 0.4rem 0.8rem; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; }
+  .notice { background: #fff8e1; border: 1px solid #ffe082; padding: 0.6rem 0.8rem; border-radius: 4px; margin-bottom: 1rem; }
   .controls { margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .controls button { padding: 0.4rem 0.8rem; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; }
   .controls button.active { background: #333; color: #fff; }
   input[type=search] { padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; flex: 1; max-width: 240px; }
-  table { border-collapse: collapse; width: 100%; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
   th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
   th { background: #f5f5f5; }
+  #view-recommend h2 { margin-top: 1.5rem; }
 </style>
 </head>
 <body>
 <h1>지원자 목록</h1>
 <div class="summary">총 $total명 · 수집 시각 $collected_at</div>
-<div class="controls">
-  $posting_buttons
-  <input type="search" id="search" placeholder="이름 또는 전화번호 검색">
+<div class="mode-toggle">
+  <button id="toggle-recommend" type="button">추천 보기</button>
 </div>
-<table id="table">
-  <thead><tr>$table_headers</tr></thead>
-  <tbody></tbody>
-</table>
+<div id="view-all">
+  <div class="controls">
+    $posting_buttons
+    <input type="search" id="search" placeholder="이름 또는 전화번호 검색">
+  </div>
+  <table id="table">
+    <thead><tr>$table_headers</tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<div id="view-recommend" style="display:none;">
+  <p class="notice">이 목록은 참고용이며, 실제 승인/거절은 엑스파일에서 직접 진행하세요.</p>
+  <div id="recommend-groups"></div>
+</div>
 <script>
 const DATA = $data_json;
 const COLUMNS = $columns_json;
+const RECOMMEND_GROUPS = $recommend_json;
 const tbody = document.querySelector("#table tbody");
 let activePosting = "ALL";
 let query = "";
@@ -132,6 +146,59 @@ document.querySelectorAll(".controls button[data-posting]").forEach(btn => {
 document.querySelector("#search").addEventListener("input", (event) => {
   query = event.target.value.trim();
   render();
+});
+
+function renderRecommend() {
+  const container = document.querySelector("#recommend-groups");
+  container.innerHTML = "";
+  if (RECOMMEND_GROUPS.length === 0) {
+    const p = document.createElement("p");
+    p.textContent = "현재 대기 중인 지원자가 없습니다";
+    container.appendChild(p);
+    return;
+  }
+  RECOMMEND_GROUPS.forEach(group => {
+    const h2 = document.createElement("h2");
+    h2.textContent = group.schedule + " (" + group.applicants.length + "명)";
+    container.appendChild(h2);
+
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    COLUMNS.forEach(col => {
+      const th = document.createElement("th");
+      th.textContent = col.label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const body = document.createElement("tbody");
+    group.applicants.forEach(row => {
+      const tr = document.createElement("tr");
+      COLUMNS.forEach(col => {
+        const td = document.createElement("td");
+        td.textContent = row[col.key];
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    container.appendChild(table);
+  });
+}
+
+const viewAll = document.querySelector("#view-all");
+const viewRecommend = document.querySelector("#view-recommend");
+const toggleBtn = document.querySelector("#toggle-recommend");
+let recommendMode = false;
+
+toggleBtn.addEventListener("click", () => {
+  recommendMode = !recommendMode;
+  viewAll.style.display = recommendMode ? "none" : "";
+  viewRecommend.style.display = recommendMode ? "" : "none";
+  toggleBtn.textContent = recommendMode ? "전체 목록" : "추천 보기";
+  if (recommendMode) renderRecommend();
 });
 
 render();
@@ -188,6 +255,7 @@ def render_html(applicants: list[dict], collected_at: str) -> str:
         table_headers=table_headers,
         data_json=_safe_json(rows),
         columns_json=_safe_json(columns),
+        recommend_json=_safe_json(group_pending_by_schedule(applicants)),
     )
 
 
