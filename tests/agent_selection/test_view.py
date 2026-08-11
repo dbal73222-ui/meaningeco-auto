@@ -169,7 +169,7 @@ def test_group_pending_by_schedule_projects_view_columns_only():
 
     row = result[0]["applicants"][0]
     assert set(row.keys()) == {
-        "name", "phone", "posting_title", "role_type",
+        "name", "phone", "posting_title",
         "participation_count", "status", "applied_at",
     }
 
