@@ -19,6 +19,10 @@ class Config:
     posting_urls: tuple[str, ...]
     headless: bool
     output_dir: str
+    api_base_url: str | None
+    api_email: str
+    api_password: str = field(repr=False)
+    supervisor_career_threshold: int | None
 
 
 def load_config(env_path: str | None = None) -> Config:
@@ -45,6 +49,23 @@ def load_config(env_path: str | None = None) -> Config:
         url.strip() for url in posting_urls_raw.split(",") if url.strip()
     )
 
+    # 경력 보강 기능은 완전히 선택적이므로 미설정 시 None — main.py가 이 값으로 기능을 끈다
+    api_base_url = os.getenv("XFILE_API_BASE_URL", "").strip() or None
+    # 기업회원 로그인이 기존 Playwright 관리자 로그인과 같은 계정 체계일 가능성이 높아
+    # 기본값은 기존 XFILE_USERNAME/PASSWORD를 재사용하고, 다르면 명시적으로 덮어쓸 수 있게 함
+    api_email = os.getenv("XFILE_API_EMAIL", "").strip() or username
+    api_password = os.getenv("XFILE_API_PASSWORD", "").strip() or password
+
+    threshold_raw = os.getenv("XFILE_SUPERVISOR_CAREER_THRESHOLD", "").strip()
+    supervisor_career_threshold: int | None = None
+    if threshold_raw:
+        try:
+            supervisor_career_threshold = int(threshold_raw)
+        except ValueError as exc:
+            raise ConfigError(
+                "XFILE_SUPERVISOR_CAREER_THRESHOLD은 정수여야 합니다."
+            ) from exc
+
     return Config(
         login_url=login_url,
         username=username,
@@ -52,4 +73,8 @@ def load_config(env_path: str | None = None) -> Config:
         posting_urls=posting_urls,
         headless=headless_raw != "false",
         output_dir=output_dir,
+        api_base_url=api_base_url,
+        api_email=api_email,
+        api_password=api_password,
+        supervisor_career_threshold=supervisor_career_threshold,
     )
