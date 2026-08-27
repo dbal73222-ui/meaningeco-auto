@@ -295,6 +295,10 @@ def _make_config(output_dir: Path) -> Config:
         posting_urls=("https://example.com/posting/1",),
         headless=True,
         output_dir=str(output_dir),
+        api_base_url=None,
+        api_email="user",
+        api_password="pw",
+        supervisor_career_threshold=None,
     )
 
 
