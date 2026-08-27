@@ -1,7 +1,15 @@
+import logging
+
 import pytest
 import requests
 
-from agent_selection.xfile_api_client import XfileApiAuthError, extract_job_posting_id, login
+from agent_selection.xfile_api_client import (
+    XfileApiAuthError,
+    XfileApiError,
+    extract_job_posting_id,
+    fetch_applicants_with_career,
+    login,
+)
 
 
 class _FakeResponse:
@@ -47,6 +55,89 @@ def test_login_raises_on_network_error():
 
     with pytest.raises(XfileApiAuthError):
         login("https://api.example.com", "biz@example.com", "secret", http_client=_RaisingHttpClient())
+
+
+def _job_applications_response(items: list[dict], total: int | None = None) -> dict:
+    return {
+        "data": items,
+        "page": 1,
+        "limit": 200,
+        "total": total if total is not None else len(items),
+        "totalPage": 1,
+    }
+
+
+def _applicant_item(phone_no: str, career_count: int) -> dict:
+    return {
+        "id": "app-1",
+        "status": "PENDING",
+        "agentUser": {
+            "id": "agent-1",
+            "phoneNo": phone_no,
+            "careers": [{"jobPostingId": f"posting-{i}"} for i in range(career_count)],
+        },
+    }
+
+
+class _FakeGetHttpClient:
+    def __init__(self, response: _FakeResponse):
+        self._response = response
+        self.last_call: dict | None = None
+
+    def get(self, url, headers=None, params=None, timeout=None):
+        self.last_call = {"url": url, "headers": headers, "params": params, "timeout": timeout}
+        return self._response
+
+
+def test_fetch_applicants_with_career_maps_phone_to_career_count():
+    items = [_applicant_item("010-1234-5678", 3), _applicant_item("010-0000-0000", 0)]
+    fake_http = _FakeGetHttpClient(_FakeResponse(200, _job_applications_response(items)))
+
+    result = fetch_applicants_with_career(
+        "https://api.example.com", "token-abc", "posting-1", http_client=fake_http
+    )
+
+    assert result == {"01012345678": 3, "01000000000": 0}
+    assert fake_http.last_call["url"] == "https://api.example.com/business/job-applications/posting-1"
+    assert fake_http.last_call["headers"] == {"Authorization": "Bearer token-abc"}
+    assert fake_http.last_call["params"] == {
+        "sortBy": "career",
+        "sortOrder": "desc",
+        "page": 1,
+        "limit": 200,
+    }
+
+
+def test_fetch_applicants_with_career_logs_warning_when_total_exceeds_limit(caplog):
+    items = [_applicant_item("010-1234-5678", 1)]
+    fake_http = _FakeGetHttpClient(_FakeResponse(200, _job_applications_response(items, total=500)))
+
+    with caplog.at_level(logging.WARNING):
+        fetch_applicants_with_career(
+            "https://api.example.com", "token-abc", "posting-1", http_client=fake_http
+        )
+
+    assert any("500" in message for message in caplog.messages)
+
+
+def test_fetch_applicants_with_career_raises_on_non_200_status():
+    fake_http = _FakeGetHttpClient(_FakeResponse(403, {"message": "forbidden"}))
+
+    with pytest.raises(XfileApiError):
+        fetch_applicants_with_career(
+            "https://api.example.com", "token-abc", "posting-1", http_client=fake_http
+        )
+
+
+def test_fetch_applicants_with_career_raises_on_network_error():
+    class _RaisingHttpClient:
+        def get(self, url, headers=None, params=None, timeout=None):
+            raise requests.exceptions.ConnectionError("connection refused")
+
+    with pytest.raises(XfileApiError):
+        fetch_applicants_with_career(
+            "https://api.example.com", "token-abc", "posting-1", http_client=_RaisingHttpClient()
+        )
 
 
 def test_extract_job_posting_id_from_detail_url():
