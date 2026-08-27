@@ -35,6 +35,8 @@ VIEW_COLUMNS: tuple[str, ...] = (
     "phone",
     "posting_title",
     "participation_count",
+    "career_count",
+    "supervisor_candidate",
     "status",
     "applied_at",
 )
@@ -44,19 +46,36 @@ VIEW_COLUMN_LABELS: dict[str, str] = {
     "phone": "전화번호",
     "posting_title": "공고명",
     "participation_count": "참여횟수",
+    "career_count": "경력",
+    "supervisor_candidate": "슈퍼바이저 후보",
     "status": "지원상태",
     "applied_at": "지원일시",
 }
 
 
-def group_pending_by_schedule(applicants: list[dict]) -> list[dict]:
+def _career_display_fields(applicant: dict, supervisor_threshold: int | None) -> dict[str, str]:
+    career_count = applicant.get("career_count")
+    if career_count is None:
+        return {"career_count": "정보 없음", "supervisor_candidate": ""}
+    is_candidate = supervisor_threshold is not None and career_count >= supervisor_threshold
+    return {
+        "career_count": str(career_count),
+        "supervisor_candidate": "✓" if is_candidate else "",
+    }
+
+
+def group_pending_by_schedule(
+    applicants: list[dict], supervisor_threshold: int | None = None
+) -> list[dict]:
     # 참여횟수는 외부 경력을 반영 못하므로 그룹/정렬 기준에서 제외 (표시 컬럼으로만 유지)
+    # 경력(career_count) 역시 표시용일 뿐 그룹/정렬 기준에는 포함하지 않음 — 같은 이유
     groups: dict[str, list[dict]] = {}
     for applicant in applicants:
         if applicant.get("status") != "대기":
             continue
         schedule = applicant.get("selected_schedule") or "미지정"
         row = {col: applicant.get(col, "") for col in VIEW_COLUMNS}
+        row.update(_career_display_fields(applicant, supervisor_threshold))
         groups.setdefault(schedule, []).append(row)
 
     for rows in groups.values():
@@ -223,10 +242,13 @@ def _safe_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False).replace("<", "\\u003c")
 
 
-def render_html(applicants: list[dict], collected_at: str) -> str:
+def render_html(
+    applicants: list[dict], collected_at: str, supervisor_threshold: int | None = None
+) -> str:
     rows = [
         {col: applicant.get(col, "") for col in VIEW_COLUMNS}
         | {"posting_url": applicant.get("posting_url", "")}
+        | _career_display_fields(applicant, supervisor_threshold)
         for applicant in applicants
     ]
 
@@ -254,7 +276,7 @@ def render_html(applicants: list[dict], collected_at: str) -> str:
         table_headers=table_headers,
         data_json=_safe_json(rows),
         columns_json=_safe_json(columns),
-        recommend_json=_safe_json(group_pending_by_schedule(applicants)),
+        recommend_json=_safe_json(group_pending_by_schedule(applicants, supervisor_threshold)),
     )
 
 
@@ -289,7 +311,9 @@ def main() -> int:
         except ViewError as exc:
             logger.error("%s", exc)
             return 1
-        html_content = render_html(applicants, format_collected_at(latest))
+        html_content = render_html(
+            applicants, format_collected_at(latest), config.supervisor_career_threshold
+        )
 
     view_path = output_dir / "view.html"
     view_path.write_text(html_content, encoding="utf-8")

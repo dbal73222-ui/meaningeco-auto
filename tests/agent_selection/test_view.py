@@ -170,7 +170,8 @@ def test_group_pending_by_schedule_projects_view_columns_only():
     row = result[0]["applicants"][0]
     assert set(row.keys()) == {
         "name", "phone", "posting_title",
-        "participation_count", "status", "applied_at",
+        "participation_count", "career_count", "supervisor_candidate",
+        "status", "applied_at",
     }
 
 
@@ -198,6 +199,54 @@ def test_render_html_includes_applicant_values():
     assert "010-1234-5678" in html
     assert "총 2명" in html
     assert "2026-08-10 14:30:00" in html
+
+
+def test_render_html_shows_no_info_for_missing_career_count():
+    rows = [{**SAMPLE_ROWS[0], "career_count": None}]
+
+    html = render_html(rows, "2026-08-10 14:30:00")
+
+    assert "정보 없음" in html
+
+
+def test_render_html_shows_career_count_value():
+    rows = [{**SAMPLE_ROWS[0], "career_count": 7}]
+
+    html = render_html(rows, "2026-08-10 14:30:00")
+
+    assert ">7<" in html or "7" in html
+
+
+def test_render_html_marks_supervisor_candidate_when_above_threshold():
+    rows = [{**SAMPLE_ROWS[0], "career_count": 10}]
+
+    html = render_html(rows, "2026-08-10 14:30:00", supervisor_threshold=5)
+
+    assert "✓" in html
+
+
+def test_render_html_does_not_mark_supervisor_candidate_below_threshold():
+    rows = [{**SAMPLE_ROWS[0], "career_count": 2}]
+
+    html = render_html(rows, "2026-08-10 14:30:00", supervisor_threshold=5)
+
+    columns_data = html.split("const DATA = ")[1].split(";\nconst COLUMNS")[0]
+    assert '"supervisor_candidate": ""' in columns_data
+
+
+def test_render_html_includes_career_column_header():
+    html = render_html(SAMPLE_ROWS, "2026-08-10 14:30:00")
+
+    assert "경력" in html
+
+
+def test_group_pending_by_schedule_includes_career_display_fields():
+    applicant = {**_raw_applicant("대기", "1일차", "2026-08-01 10:00"), "career_count": 8}
+
+    result = group_pending_by_schedule([applicant], supervisor_threshold=5)
+
+    assert result[0]["applicants"][0]["career_count"] == "8"
+    assert result[0]["applicants"][0]["supervisor_candidate"] == "✓"
 
 
 def test_render_html_includes_posting_filter_buttons():
