@@ -21,6 +21,16 @@ class _FakeResponse:
         return self._payload
 
 
+class _InvalidJsonResponse:
+    """status_code는 200이지만 본문이 JSON이 아닌 경우를 흉내낸다 (프록시 오류, 빈 응답 등)."""
+
+    def __init__(self, status_code: int = 200):
+        self.status_code = status_code
+
+    def json(self):
+        raise requests.exceptions.JSONDecodeError("Expecting value", "", 0)
+
+
 class _FakeHttpClient:
     def __init__(self, response: _FakeResponse):
         self._response = response
@@ -55,6 +65,15 @@ def test_login_raises_on_network_error():
 
     with pytest.raises(XfileApiAuthError):
         login("https://api.example.com", "biz@example.com", "secret", http_client=_RaisingHttpClient())
+
+
+def test_login_raises_auth_error_on_invalid_json_response():
+    # status_code는 200인데 본문이 JSON이 아닌 경우 — 예: 프록시 오류 페이지.
+    # 전체 실행이 죽지 않고 XfileApiAuthError로 변환돼야 한다.
+    fake_http = _FakeHttpClient(_InvalidJsonResponse())
+
+    with pytest.raises(XfileApiAuthError):
+        login("https://api.example.com", "biz@example.com", "secret", http_client=fake_http)
 
 
 def _job_applications_response(items: list[dict], total: int | None = None) -> dict:
@@ -138,6 +157,33 @@ def test_fetch_applicants_with_career_raises_on_network_error():
         fetch_applicants_with_career(
             "https://api.example.com", "token-abc", "posting-1", http_client=_RaisingHttpClient()
         )
+
+
+def test_fetch_applicants_with_career_raises_xfile_error_on_invalid_json_response():
+    class _InvalidJsonGetHttpClient:
+        def get(self, url, headers=None, params=None, timeout=None):
+            return _InvalidJsonResponse()
+
+    with pytest.raises(XfileApiError):
+        fetch_applicants_with_career(
+            "https://api.example.com", "token-abc", "posting-1", http_client=_InvalidJsonGetHttpClient()
+        )
+
+
+def test_fetch_applicants_with_career_skips_applicant_with_null_agent_user():
+    # 탈퇴·삭제된 요원 계정은 agentUser가 명시적으로 null로 올 수 있다 — 이 한 건 때문에
+    # 전체 조회가 죽지 않고, 해당 지원자만 건너뛰어야 한다.
+    items = [
+        {"id": "app-1", "status": "PENDING", "agentUser": None},
+        _applicant_item("010-1234-5678", 2),
+    ]
+    fake_http = _FakeGetHttpClient(_FakeResponse(200, _job_applications_response(items)))
+
+    result = fetch_applicants_with_career(
+        "https://api.example.com", "token-abc", "posting-1", http_client=fake_http
+    )
+
+    assert result == {"01012345678": 2}
 
 
 def test_extract_job_posting_id_from_detail_url():

@@ -34,13 +34,14 @@ def login(
             headers={"Content-Type": "application/json"},
             timeout=10,
         )
+        if response.status_code != 200:
+            raise XfileApiAuthError(f"로그인 실패 (status={response.status_code})")
+        # response.json() 파싱 실패(JSONDecodeError)도 RequestException의 하위 클래스라
+        # 이 try 블록 안에 있어야 아래 except로 잡힌다 — 밖에 두면 보호되지 않는다.
+        payload = response.json()
     except requests.exceptions.RequestException as exc:
-        raise XfileApiAuthError(f"로그인 요청 중 네트워크 오류: {exc}") from exc
+        raise XfileApiAuthError(f"로그인 요청 중 오류: {exc}") from exc
 
-    if response.status_code != 200:
-        raise XfileApiAuthError(f"로그인 실패 (status={response.status_code})")
-
-    payload = response.json()
     access_token = payload.get("accessToken")
     if not access_token:
         raise XfileApiAuthError("로그인 응답에 accessToken이 없습니다.")
@@ -66,15 +67,15 @@ def fetch_applicants_with_career(
             params={"sortBy": "career", "sortOrder": "desc", "page": 1, "limit": limit},
             timeout=10,
         )
+        if response.status_code != 200:
+            raise XfileApiError(
+                f"지원자 조회 실패 (jobPostingId={job_posting_id}, status={response.status_code})"
+            )
+        # response.json() 파싱 실패도 RequestException 하위 클래스라 try 안에 둬야 보호된다.
+        payload = response.json()
     except requests.exceptions.RequestException as exc:
-        raise XfileApiError(f"지원자 조회 중 네트워크 오류 (jobPostingId={job_posting_id}): {exc}") from exc
+        raise XfileApiError(f"지원자 조회 중 오류 (jobPostingId={job_posting_id}): {exc}") from exc
 
-    if response.status_code != 200:
-        raise XfileApiError(
-            f"지원자 조회 실패 (jobPostingId={job_posting_id}, status={response.status_code})"
-        )
-
-    payload = response.json()
     total = payload.get("total", 0)
     if total > limit:
         logger.warning(
@@ -86,7 +87,9 @@ def fetch_applicants_with_career(
 
     career_counts_by_phone: dict[str, int] = {}
     for item in payload.get("data", []):
-        agent_user = item.get("agentUser", {})
+        # .get(key, {})은 키가 아예 없을 때만 기본값을 쓴다. agentUser가 명시적으로
+        # null(탈퇴·삭제된 요원)이면 None이 그대로 반환되므로 "or {}"로 한 번 더 막는다.
+        agent_user = item.get("agentUser") or {}
         phone_no = agent_user.get("phoneNo")
         careers = agent_user.get("careers", [])
         if not phone_no:
